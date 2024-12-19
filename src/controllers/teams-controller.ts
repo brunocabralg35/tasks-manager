@@ -4,6 +4,17 @@ import { prisma } from "@/database/prisma";
 import { z } from "zod";
 
 class TeamsController {
+  async index(req: Request, res: Response) {
+    const teams = await prisma.team.findMany({
+      include: {
+        members: true,
+        tasks: true,
+      },
+    });
+
+    return res.status(200).json(teams);
+  }
+
   async create(req: Request, res: Response) {
     const createTeamBodySchema = z.object({
       name: z.string(),
