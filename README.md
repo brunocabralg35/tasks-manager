@@ -38,8 +38,8 @@ This project is a backend API built with Node.js, Express, and Prisma to manage 
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/your-repo.git
-   cd your-repo
+   git clone https://github.com/brunocabralg35/tasks-manager
+   cd tasks-manager
    ```
 
 2. **Install dependencies**
