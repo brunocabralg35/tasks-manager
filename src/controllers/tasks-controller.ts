@@ -4,15 +4,47 @@ import { prisma } from "@/database/prisma";
 import { z } from "zod";
 
 class TasksController {
-  async create(req: Request, res: Response) {
-    const id = z
+  async index(req: Request, res: Response) {
+    const team_id = z
       .string()
       .transform((value) => Number(value))
       .refine((value) => !isNaN(value), { message: "id must be a number" })
-      .parse(req.params.id);
+      .parse(req.params.team_id);
 
     const team = await prisma.team.findUnique({
-      where: { id },
+      where: { id: team_id },
+    });
+
+    if (!team) {
+      throw new AppError("Team not found", 404);
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        teamId: team.id,
+      },
+      include: {
+        assignedToUser: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return res.json(tasks);
+  }
+
+  async create(req: Request, res: Response) {
+    const team_id = z
+      .string()
+      .transform((value) => Number(value))
+      .refine((value) => !isNaN(value), { message: "id must be a number" })
+      .parse(req.params.team_id);
+
+    const team = await prisma.team.findUnique({
+      where: { id: team_id },
     });
 
     if (!team) {
@@ -22,8 +54,10 @@ class TasksController {
     const createTaskBodySchema = z.object({
       title: z.string(),
       description: z.string().optional(),
-      status: z.enum(["pending", "in_progress", "completed"]),
-      priority: z.enum(["high", "medium", "low"]),
+      status: z
+        .enum(["pending", "in_progress", "completed"])
+        .default("pending"),
+      priority: z.enum(["high", "medium", "low"]).default("low"),
       assigned_to: z
         .string()
         .transform((value) => Number(value))
@@ -43,7 +77,7 @@ class TasksController {
       throw new AppError("User not found", 404);
     }
 
-    const task = await prisma.task.create({
+    await prisma.task.create({
       data: {
         title,
         description,
@@ -55,6 +89,91 @@ class TasksController {
     });
 
     return res.status(201).json();
+  }
+
+  async update(req: Request, res: Response) {
+    const id = z
+      .string()
+      .transform((value) => Number(value))
+      .refine((value) => !isNaN(value), { message: "id must be a number" })
+      .parse(req.params.id);
+
+    const task = await prisma.task.findFirst({
+      where: { id },
+    });
+
+    if (!task) {
+      throw new AppError("Task not found", 404);
+    }
+
+    if (
+      req.user!.role !== "admin" &&
+      Number(req.user!.id) !== task.assignedTo
+    ) {
+      throw new AppError("You are not allowed to update this task", 403);
+    }
+
+    const statusSchema = z.enum(["pending", "in_progress", "completed"]);
+
+    const status = statusSchema.parse(req.body.status);
+
+    if (status === task.status) {
+      throw new AppError("Task status is the same", 400);
+    }
+
+    await prisma.task.update({
+      where: { id },
+      data: {
+        status,
+      },
+    });
+
+    await prisma.taskHistory.create({
+      data: {
+        taskId: id,
+        oldStatus: task.status,
+        newStatus: status,
+        changedBy: Number(req.user!.id),
+      },
+    });
+
+    return res.status(200).json();
+  }
+
+  async delete(req: Request, res: Response) {
+    const id = z
+      .string()
+      .transform((value) => Number(value))
+      .refine((value) => !isNaN(value), { message: "id must be a number" })
+      .parse(req.params.id);
+
+    const task = await prisma.task.findFirst({
+      where: { id },
+    });
+
+    if (!task) {
+      throw new AppError("Task not found", 404);
+    }
+
+    const taskHistory = await prisma.taskHistory.findMany({
+      where: {
+        taskId: task.id,
+      },
+    });
+
+    await prisma.taskHistory.deleteMany({
+      where: {
+        taskId: task.id,
+      },
+    });
+
+    await prisma.task.delete({
+      where: {
+        id: task.id,
+      },
+    });
+
+    return res.status(200).json();
   }
 }
 

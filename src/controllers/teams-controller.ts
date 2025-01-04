@@ -7,7 +7,17 @@ class TeamsController {
   async index(req: Request, res: Response) {
     const teams = await prisma.team.findMany({
       include: {
-        members: true,
+        members: {
+          select: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
         tasks: true,
       },
     });
